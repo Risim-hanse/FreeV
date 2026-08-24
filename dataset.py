@@ -1,14 +1,11 @@
-import math
 import os
 import random
+
+import librosa
+import numpy as np
 import torch
 import torch.utils.data
-import numpy as np
-from librosa.util import normalize
 from librosa.filters import mel as librosa_mel_fn
-import librosa
-import torchaudio
-import torch.nn as nn
 from pghipy import pghi
 
 
@@ -63,7 +60,6 @@ def mel_spectrogram(
     center=True,
     in_dataset=False,
 ):
-    global mel_window
     device = torch.device("cpu") if in_dataset else y.device
     ps = param_string(sampling_rate, n_fft, num_mels, fmin, fmax, win_size, device)
     if ps in mel_window:
@@ -103,7 +99,6 @@ def inverse_mel(
     fmax,
     in_dataset=False,
 ):
-    global inv_mel_window, mel_window
     device = torch.device("cpu") if in_dataset else mel.device
     ps = param_string(sampling_rate, n_fft, num_mels, fmin, fmax, win_size, device)
     if ps in inv_mel_window:

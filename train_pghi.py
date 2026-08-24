@@ -2,36 +2,34 @@ import warnings
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 import itertools
+import json
 import os
 import time
-import argparse
-import json
+
 import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import DistributedSampler, DataLoader
-import torch.multiprocessing as mp
-from torch.distributed import init_process_group
-from torch.nn.parallel import DistributedDataParallel
-from dataset import Dataset, mel_spectrogram, amp_pha_specturm, get_dataset_filelist
+
+from dataset import Dataset, amp_pha_specturm, get_dataset_filelist, mel_spectrogram
 from models_pghi import (
     Generator,
     MultiPeriodDiscriminator,
+    MultiResolutionDiscriminator,
+    STFT_consistency_loss,
+    amplitude_loss,
+    discriminator_loss,
     feature_loss,
     generator_loss,
-    discriminator_loss,
-    amplitude_loss,
     phase_loss,
-    STFT_consistency_loss,
-    MultiResolutionDiscriminator,
 )
 from utils import (
     AttrDict,
     build_env,
-    plot_spectrogram,
-    scan_checkpoint,
     load_checkpoint,
+    plot_spectrogram,
     save_checkpoint,
+    scan_checkpoint,
 )
 
 torch.backends.cudnn.benchmark = True
@@ -39,7 +37,7 @@ torch.backends.cudnn.benchmark = True
 
 def train(h):
     torch.cuda.manual_seed(h.seed)
-    device = torch.device("cuda:{:d}".format(0))
+    device = torch.device(f"cuda:{0:d}")
 
     generator = Generator(h).to(device)
     mpd = MultiPeriodDiscriminator().to(device)
@@ -154,13 +152,11 @@ def train(h):
 
     for epoch in range(max(0, last_epoch), h.training_epochs):
         start = time.time()
-        print("Epoch: {}".format(epoch + 1))
+        print(f"Epoch: {epoch + 1}")
 
         for i, batch in enumerate(train_loader):
             start_b = time.time()
-            x, logamp, pha, rea, imag, y, meloss, inv_mel, pghid = map(
-                lambda x: x.to(device, non_blocking=True), batch
-            )
+            x, logamp, pha, rea, imag, y, meloss, inv_mel, pghid = (x.to(device, non_blocking=True) for x in batch)
             y = y.unsqueeze(1)
             logamp_g, pha_g, rea_g, imag_g, y_g = generator(
                 x, inv_mel=inv_mel, pghi=pghid
@@ -179,12 +175,12 @@ def train(h):
             optim_d.zero_grad()
 
             y_df_hat_r, y_df_hat_g, _, _ = mpd(y, y_g.detach())
-            loss_disc_f, losses_disc_f_r, losses_disc_f_g = discriminator_loss(
+            loss_disc_f, _losses_disc_f_r, _losses_disc_f_g = discriminator_loss(
                 y_df_hat_r, y_df_hat_g
             )
 
             y_ds_hat_r, y_ds_hat_g, _, _ = mrd(y, y_g.detach())
-            loss_disc_s, losses_disc_s_r, losses_disc_s_g = discriminator_loss(
+            loss_disc_s, _losses_disc_s_r, _losses_disc_s_g = discriminator_loss(
                 y_ds_hat_r, y_ds_hat_g
             )
 
@@ -212,12 +208,12 @@ def train(h):
             # Losses defined on reconstructed STFT spectra
             L_S = L_C + 2.25 * (L_R + L_I)
 
-            y_df_r, y_df_g, fmap_f_r, fmap_f_g = mpd(y, y_g)
-            y_ds_r, y_ds_g, fmap_s_r, fmap_s_g = mrd(y, y_g)
+            _y_df_r, y_df_g, fmap_f_r, fmap_f_g = mpd(y, y_g)
+            _y_ds_r, y_ds_g, fmap_s_r, fmap_s_g = mrd(y, y_g)
             loss_fm_f = feature_loss(fmap_f_r, fmap_f_g)
             loss_fm_s = feature_loss(fmap_s_r, fmap_s_g)
-            loss_gen_f, losses_gen_f = generator_loss(y_df_g)
-            loss_gen_s, losses_gen_s = generator_loss(y_ds_g)
+            loss_gen_f, _losses_gen_f = generator_loss(y_df_g)
+            loss_gen_s, _losses_gen_s = generator_loss(y_ds_g)
             L_GAN_G = loss_gen_s * 0.1 + loss_gen_f
             L_FM = loss_fm_s * 0.1 + loss_fm_f
             L_Mel = F.l1_loss(meloss, y_g_mel)
@@ -247,26 +243,14 @@ def train(h):
                     Mel_error = F.l1_loss(x, y_g_mel).item()
 
                 print(
-                    "Steps : {:d}, Gen Loss Total : {:4.3f}, Amplitude Loss : {:4.3f}, Instantaneous Phase Loss : {:4.3f}, Group Delay Loss : {:4.3f}, Phase Time Difference Loss : {:4.3f}, STFT Consistency Loss : {:4.3f}, Real Part Loss : {:4.3f}, Imaginary Part Loss : {:4.3f}, Mel Spectrogram Loss : {:4.3f}, s/b : {:4.3f}".format(
-                        steps,
-                        L_G,
-                        A_error,
-                        IP_error,
-                        GD_error,
-                        PTD_error,
-                        C_error,
-                        R_error,
-                        I_error,
-                        Mel_error,
-                        time.time() - start_b,
-                    )
+                    f"Steps : {steps:d}, Gen Loss Total : {L_G:4.3f}, Amplitude Loss : {A_error:4.3f}, Instantaneous Phase Loss : {IP_error:4.3f}, Group Delay Loss : {GD_error:4.3f}, Phase Time Difference Loss : {PTD_error:4.3f}, STFT Consistency Loss : {C_error:4.3f}, Real Part Loss : {R_error:4.3f}, Imaginary Part Loss : {I_error:4.3f}, Mel Spectrogram Loss : {Mel_error:4.3f}, s/b : {time.time() - start_b:4.3f}"
                 )
 
             # checkpointing
             if steps % h.checkpoint_interval == 0 and steps != 0:
-                checkpoint_path = "{}/g_{:08d}".format(h.checkpoint_path, steps)
+                checkpoint_path = f"{h.checkpoint_path}/g_{steps:08d}"
                 save_checkpoint(checkpoint_path, {"generator": generator.state_dict()})
-                checkpoint_path = "{}/do_{:08d}".format(h.checkpoint_path, steps)
+                checkpoint_path = f"{h.checkpoint_path}/do_{steps:08d}"
                 save_checkpoint(
                     checkpoint_path,
                     {
@@ -298,9 +282,7 @@ def train(h):
                 val_Mel_err_tot = 0
                 with torch.no_grad():
                     for j, batch in enumerate(validation_loader):
-                        x, logamp, pha, rea, imag, y, meloss, inv_mel, pghid = map(
-                            lambda x: x.to(device, non_blocking=True), batch
-                        )
+                        x, logamp, pha, rea, imag, y, meloss, inv_mel, pghid = (x.to(device, non_blocking=True) for x in batch)
                         logamp_g, pha_g, rea_g, imag_g, y_g = generator(
                             x, inv_mel=inv_mel, pghi=pghid
                         )
@@ -336,16 +318,16 @@ def train(h):
                         if j <= 4:
                             if steps == 0:
                                 sw.add_audio(
-                                    "gt/y_{}".format(j), y[0], steps, h.sampling_rate
+                                    f"gt/y_{j}", y[0], steps, h.sampling_rate
                                 )
                                 sw.add_figure(
-                                    "gt/y_spec_{}".format(j),
+                                    f"gt/y_spec_{j}",
                                     plot_spectrogram(x[0]),
                                     steps,
                                 )
 
                             sw.add_audio(
-                                "generated/y_g_{}".format(j),
+                                f"generated/y_g_{j}",
                                 y_g[0],
                                 steps,
                                 h.sampling_rate,
@@ -361,7 +343,7 @@ def train(h):
                                 h.fmax,
                             )
                             sw.add_figure(
-                                "generated/y_g_spec_{}".format(j),
+                                f"generated/y_g_spec_{j}",
                                 plot_spectrogram(y_g_spec.squeeze(0).cpu().numpy()),
                                 steps,
                             )
@@ -395,9 +377,7 @@ def train(h):
         scheduler_d.step()
 
         print(
-            "Time taken for epoch {} is {} sec\n".format(
-                epoch + 1, int(time.time() - start)
-            )
+            f"Time taken for epoch {epoch + 1} is {int(time.time() - start)} sec\n"
         )
 
 

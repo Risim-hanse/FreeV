@@ -1,11 +1,13 @@
+from __future__ import annotations
+
+import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.nn as nn
-from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
-from torch.nn.utils import weight_norm, spectral_norm
-from utils import init_weights, get_padding
-from dataset import inverse_mel
-import numpy as np
+from torch import nn
+from torch.nn import Conv1d, Conv2d
+from torch.nn.utils import spectral_norm, weight_norm
+
+from utils import get_padding
 
 LRELU_SLOPE = 0.1
 
@@ -68,7 +70,7 @@ class ConvNeXtBlock(nn.Module):
 
 class Generator(torch.nn.Module):
     def __init__(self, h):
-        super(Generator, self).__init__()
+        super().__init__()
         self.h = h
         self.ASP_num_kernels = len(h.ASP_resblock_kernel_sizes)
         self.PSP_num_kernels = len(h.PSP_resblock_kernel_sizes)
@@ -191,7 +193,7 @@ class Generator(torch.nn.Module):
 
 class DiscriminatorP(torch.nn.Module):
     def __init__(self, period, kernel_size=5, stride=3, use_spectral_norm=False):
-        super(DiscriminatorP, self).__init__()
+        super().__init__()
         self.period = period
         norm_f = weight_norm if use_spectral_norm == False else spectral_norm
         self.convs = nn.ModuleList(
@@ -261,7 +263,7 @@ class DiscriminatorP(torch.nn.Module):
 
 class MultiPeriodDiscriminator(torch.nn.Module):
     def __init__(self):
-        super(MultiPeriodDiscriminator, self).__init__()
+        super().__init__()
         self.discriminators = nn.ModuleList(
             [
                 DiscriminatorP(2),
@@ -320,7 +322,7 @@ class MultiResolutionDiscriminator(nn.Module):
     def __init__(
         self,
         resolutions=((1024, 256, 1024), (2048, 512, 2048), (512, 128, 512)),
-        num_embeddings: int = None,
+        num_embeddings: int | None = None,
     ):
         super().__init__()
         self.discriminators = nn.ModuleList(
@@ -355,7 +357,7 @@ class DiscriminatorR(nn.Module):
         resolution,
         channels: int = 64,
         in_channels: int = 1,
-        num_embeddings: int = None,
+        num_embeddings: int | None = None,
         lrelu_slope: float = 0.1,
     ):
         super().__init__()

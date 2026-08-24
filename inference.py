@@ -1,24 +1,25 @@
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import glob
-import os
-import argparse
 import json
-import torch
-from utils import AttrDict
-from dataset import mel_spectrogram, load_wav
-from models import Generator
-import soundfile as sf
+import os
+import time
+
 import librosa
 import numpy as np
-import time
+import soundfile as sf
+import torch
+
+from dataset import mel_spectrogram
+from models import Generator
+from utils import AttrDict
+
 h = None
 device = None
 
 
 def load_checkpoint(filepath, device):
     assert os.path.isfile(filepath)
-    print("Loading '{}'".format(filepath))
+    print(f"Loading '{filepath}'")
     checkpoint_dict = torch.load(filepath, map_location=device)
     print("Complete.")
     return checkpoint_dict
@@ -33,7 +34,7 @@ def scan_checkpoint(cp_dir, prefix):
     cp_list = glob.glob(pattern)
     if len(cp_list) == 0:
         return ''
-    return sorted(cp_list)[-1]
+    return max(cp_list)
 
 
 def inference(h):
@@ -62,7 +63,7 @@ def inference(h):
                 raw_wav = torch.FloatTensor(raw_wav).to(device)
                 x = get_mel(raw_wav.unsqueeze(0))
             
-            logamp_g, pha_g, _, _, y_g = generator(x)
+            _logamp_g, _pha_g, _, _, y_g = generator(x)
             audio = y_g.squeeze()
             # logamp = logamp_g.squeeze()
             # pha = pha_g.squeeze()
