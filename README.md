@@ -40,7 +40,7 @@ Here are the configs and train scripts for the supported settings.
 | Model | Config File | Train Script | 
 | --- | ---| ---|
 |APNet2|config.json|train.py|
-|FreeV | config2.json|train_freev.py|
+|FreeV | config_freev.json|train_freev.py|
 
 ## Training
 ```

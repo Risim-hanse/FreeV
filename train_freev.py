@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from dataset import Dataset, amp_pha_specturm, get_dataset_filelist, mel_spectrogram
-from models2 import (
+from models_freev import (
     Generator,
     MultiPeriodDiscriminator,
     MultiResolutionDiscriminator,
@@ -377,14 +377,14 @@ def train(h):
 def main():
     print("Initializing Training Process..")
 
-    config_file = "config2.json"
+    config_file = "config_freev.json"
 
     with open(config_file) as f:
         data = f.read()
 
     json_config = json.loads(data)
     h = AttrDict(json_config)
-    build_env(config_file, "config2.json", h.checkpoint_path)
+    build_env(config_file, "config_freev.json", h.checkpoint_path)
 
     torch.manual_seed(h.seed)
     if torch.cuda.is_available():

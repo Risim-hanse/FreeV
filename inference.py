@@ -1,3 +1,4 @@
+import argparse
 import glob
 import json
 import os
@@ -9,11 +10,7 @@ import soundfile as sf
 import torch
 
 from dataset import mel_spectrogram
-from models import Generator
 from utils import AttrDict
-
-h = None
-device = None
 
 
 def load_checkpoint(filepath, device):
@@ -24,8 +21,17 @@ def load_checkpoint(filepath, device):
     return checkpoint_dict
 
 
-def get_mel(x):
-    return mel_spectrogram(x, h.n_fft, h.num_mels, h.sampling_rate, h.hop_size, h.win_size, h.fmin, h.fmax)
+def get_mel(x, h):
+    return mel_spectrogram(
+        x,
+        h.n_fft,
+        h.num_mels,
+        h.sampling_rate,
+        h.hop_size,
+        h.win_size,
+        h.fmin,
+        h.fmax,
+    )
 
 
 def scan_checkpoint(cp_dir, prefix):
@@ -36,78 +42,81 @@ def scan_checkpoint(cp_dir, prefix):
     return max(cp_list)
 
 
-def inference(h):
+def inference(h, device):
+    model_module = __import__(h.model_module, fromlist=["Generator"])
+    Generator = model_module.Generator
     generator = Generator(h).to(device)
 
     state_dict_g = load_checkpoint(h.checkpoint_file_load, device)
     generator.load_state_dict(state_dict_g['generator'])
 
-    filelist = sorted(os.listdir(h.test_input_mels_dir if h.test_mel_load else h.test_input_wavs_dir))
+    input_dir = h.test_input_mels_dir if h.test_mel_load else h.test_input_wavs_dir
+    filelist = sorted(os.listdir(input_dir))
 
     os.makedirs(h.test_output_dir, exist_ok=True)
 
     generator.eval()
-    l=0
+    total_samples = 0
     with torch.no_grad():
         starttime = time.time()
-        for i, filename in enumerate(filelist):
-
-            # if h.test_mel_load:
-            if 1:
-                mel = np.load(os.path.join(h.test_input_wavs_dir, filename))
-                x = torch.FloatTensor(mel).to(device)
-                x=x.transpose(1,2)
+        for filename in filelist:
+            input_path = os.path.join(input_dir, filename)
+            if h.test_mel_load:
+                mel = np.load(input_path)
+                x = torch.as_tensor(mel, dtype=torch.float32, device=device)
+                if x.ndim == 2:
+                    x = x.unsqueeze(0)
+                if x.shape[-1] == h.num_mels:
+                    x = x.transpose(1, 2)
+                if x.ndim != 3 or x.shape[1] != h.num_mels:
+                    raise ValueError(
+                        f"Expected mel input shaped [B, {h.num_mels}, T] or [B, T, {h.num_mels}], "
+                        f"got {tuple(x.shape)} from {input_path}"
+                    )
             else:
-                raw_wav, _ = librosa.load(os.path.join(h.test_input_wavs_dir, filename), sr=h.sampling_rate, mono=True)
-                raw_wav = torch.FloatTensor(raw_wav).to(device)
-                x = get_mel(raw_wav.unsqueeze(0))
-            
+                raw_wav, _ = librosa.load(input_path, sr=h.sampling_rate, mono=True)
+                raw_wav = torch.as_tensor(raw_wav, dtype=torch.float32, device=device)
+                x = get_mel(raw_wav.unsqueeze(0), h)
+
             _logamp_g, _pha_g, _, _, y_g = generator(x)
             audio = y_g.squeeze()
-            # logamp = logamp_g.squeeze()
-            # pha = pha_g.squeeze()
             audio = audio.cpu().numpy()
-            # logamp = logamp.cpu().numpy()
-            # pha = pha.cpu().numpy()
-            audiolen=len(audio)
-            sf.write(os.path.join(h.test_output_dir, filename.split('.')[0]+'.wav'), audio, h.sampling_rate,'PCM_16')
+            output_name = os.path.splitext(filename)[0] + ".wav"
+            sf.write(
+                os.path.join(h.test_output_dir, output_name),
+                audio,
+                h.sampling_rate,
+                "PCM_16",
+            )
+            total_samples += len(audio)
 
-            # print(pp)
-            l+=audiolen
-            
-        #     write(output_file, h.sampling_rate, audio)
-        #     print(output_file)
         end=time.time()
         print(end-starttime)
-        print(l/22050)
-        print(l/22050/(end-starttime)) 
-            
-            # np.save(os.path.join(h.test_output_dir, filename.split('.')[0]+'_logamp.npy'), logamp)
-            # np.save(os.path.join(h.test_output_dir, filename.split('.')[0]+'_pha.npy'), pha)
-            # if i==9:
-            #     break
+        print(total_samples / h.sampling_rate)
+        print(total_samples / h.sampling_rate / (end-starttime))
 
 def main():
-    print('Initializing Inference Process..')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="config.json")
+    parser.add_argument("--model", choices=("apnet2", "freev"), default="apnet2")
+    args = parser.parse_args()
 
-    config_file = 'config.json'
+    print("Initializing Inference Process..")
 
-    with open(config_file) as f:
+    with open(args.config) as f:
         data = f.read()
 
-    global h
     json_config = json.loads(data)
     h = AttrDict(json_config)
+    h.model_module = "models" if args.model == "apnet2" else "models_freev"
 
     torch.manual_seed(h.seed)
-    global device
     if torch.cuda.is_available():
         torch.cuda.manual_seed(h.seed)
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
-    device = torch.device('cpu')
-    inference(h)
+    inference(h, device)
 
 
 if __name__ == '__main__':
