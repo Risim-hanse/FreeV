@@ -15,7 +15,18 @@ Official Repository of the paper: [FreeV: Free Lunch For Vocoders Through Pseudo
 ```bash
 git clone https://github.com/BakerBunker/FreeV.git
 cd FreeV
-pip install -r requirements.txt
+uv sync
+```
+
+The project supports Python 3.9 through 3.13. `uv.lock` records the exact
+resolved dependencies. `uv sync` creates an isolated project environment even
+when run from Conda's `base`; use `conda.yml` instead when you want Conda to
+own the Python and CUDA packages. For a Conda-based Python 3.12 GPU
+environment, use:
+
+```bash
+conda env create -f conda.yml
+conda activate freev
 ```
 
 ## Configs
