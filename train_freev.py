@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from dataset import Dataset, amp_pha_specturm, get_dataset_filelist, mel_spectrogram
-from models_pghi import (
+from models2 import (
     Generator,
     MultiPeriodDiscriminator,
     MultiResolutionDiscriminator,
@@ -101,9 +101,8 @@ def train(h):
         h.meloss,
         n_cache_reuse=0,
         shuffle=True,
-        device=device,
         inv_mel=True,
-        use_pghi=True,
+        device=device,
     )
 
     train_loader = DataLoader(
@@ -132,7 +131,6 @@ def train(h):
         n_cache_reuse=0,
         device=device,
         inv_mel=True,
-        use_pghi=True,
     )
     validation_loader = DataLoader(
         validset,
@@ -156,11 +154,9 @@ def train(h):
 
         for i, batch in enumerate(train_loader):
             start_b = time.time()
-            x, logamp, pha, rea, imag, y, meloss, inv_mel, pghid = (x.to(device, non_blocking=True) for x in batch)
+            x, logamp, pha, rea, imag, y, meloss, _inv_mel = (x.to(device, non_blocking=True) for x in batch)
             y = y.unsqueeze(1)
-            logamp_g, pha_g, rea_g, imag_g, y_g = generator(
-                x, inv_mel=inv_mel, pghi=pghid
-            )
+            logamp_g, pha_g, rea_g, imag_g, y_g = generator(x)
             y_g_mel = mel_spectrogram(
                 y_g.squeeze(1),
                 h.n_fft,
@@ -282,11 +278,8 @@ def train(h):
                 val_Mel_err_tot = 0
                 with torch.no_grad():
                     for j, batch in enumerate(validation_loader):
-                        x, logamp, pha, rea, imag, y, meloss, inv_mel, pghid = (x.to(device, non_blocking=True) for x in batch)
-                        logamp_g, pha_g, rea_g, imag_g, y_g = generator(
-                            x, inv_mel=inv_mel, pghi=pghid
-                        )
-                        x = x.cpu()
+                        x, logamp, pha, rea, imag, y, meloss, _inv_mel = (x.to(device, non_blocking=True) for x in batch)
+                        logamp_g, pha_g, rea_g, imag_g, y_g = generator(x.to(device))
                         y_g_mel = mel_spectrogram(
                             y_g.squeeze(1),
                             h.n_fft,
@@ -322,7 +315,7 @@ def train(h):
                                 )
                                 sw.add_figure(
                                     f"gt/y_spec_{j}",
-                                    plot_spectrogram(x[0]),
+                                    plot_spectrogram(x[0].cpu()),
                                     steps,
                                 )
 
@@ -384,14 +377,14 @@ def train(h):
 def main():
     print("Initializing Training Process..")
 
-    config_file = "config_pghi.json"
+    config_file = "config2.json"
 
     with open(config_file) as f:
         data = f.read()
 
     json_config = json.loads(data)
     h = AttrDict(json_config)
-    build_env(config_file, "config_pghi.json", h.checkpoint_path)
+    build_env(config_file, "config2.json", h.checkpoint_path)
 
     torch.manual_seed(h.seed)
     if torch.cuda.is_available():

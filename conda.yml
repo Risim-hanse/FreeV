@@ -17,5 +17,4 @@ dependencies:
   - conda-forge::pysoundfile
   - conda-forge::tensorboard
   - pip:
-      - pghipy>=0.1.1
       - -e . --no-deps

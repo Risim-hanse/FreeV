@@ -152,7 +152,7 @@ def train(h):
 
         for i, batch in enumerate(train_loader):
             start_b = time.time()
-            x, logamp, pha, rea, imag, y, meloss, _inv_mel, _pghid = (x.to(device, non_blocking=True) for x in batch)
+            x, logamp, pha, rea, imag, y, meloss, _inv_mel = (x.to(device, non_blocking=True) for x in batch)
             y = y.unsqueeze(1)
             logamp_g, pha_g, rea_g, imag_g, y_g = generator(x)
             y_g_mel = mel_spectrogram(
@@ -276,7 +276,7 @@ def train(h):
                 val_Mel_err_tot = 0
                 with torch.no_grad():
                     for j, batch in enumerate(validation_loader):
-                        x, logamp, pha, rea, imag, y, meloss, _inv_mel, _pghid = (x.to(device, non_blocking=True) for x in batch)
+                        x, logamp, pha, rea, imag, y, meloss, _inv_mel = (x.to(device, non_blocking=True) for x in batch)
                         logamp_g, pha_g, rea_g, imag_g, y_g = generator(x.to(device))
                         y_g_mel = mel_spectrogram(
                             y_g.squeeze(1),

@@ -9,7 +9,6 @@ dependencies = [
     "librosa>=0.10.2",
     "matplotlib>=3.7.0",
     "numpy>=1.23.5",
-    "pghipy>=0.0.1",
     "scipy>=1.10.0",
     "soundfile>=0.12.1",
     "tensorboard>=2.14.0",

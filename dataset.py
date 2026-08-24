@@ -6,7 +6,6 @@ import numpy as np
 import torch
 import torch.utils.data
 from librosa.filters import mel as librosa_mel_fn
-from pghipy import pghi
 
 
 def load_wav(full_path, sample_rate):
@@ -67,7 +66,13 @@ def mel_spectrogram(
         # print(mel_basis, hann_window)
         # mel_basis, hann_window = mel_basis.to(y.device), hann_window.to(y.device)
     else:
-        mel = librosa_mel_fn(sampling_rate, n_fft, num_mels, fmin, fmax)
+        mel = librosa_mel_fn(
+            sr=sampling_rate,
+            n_fft=n_fft,
+            n_mels=num_mels,
+            fmin=fmin,
+            fmax=fmax,
+        )
         mel_basis = torch.from_numpy(mel).float().to(device)
         hann_window = torch.hann_window(win_size).to(device)
         mel_window[ps] = (mel_basis.clone(), hann_window.clone())
@@ -107,7 +112,13 @@ def inverse_mel(
         if ps in mel_window:
             mel_basis, _ = mel_window[ps]
         else:
-            mel_np = librosa_mel_fn(sampling_rate, n_fft, num_mels, fmin, fmax)
+            mel_np = librosa_mel_fn(
+                sr=sampling_rate,
+                n_fft=n_fft,
+                n_mels=num_mels,
+                fmin=fmin,
+                fmax=fmax,
+            )
             mel_basis = torch.from_numpy(mel_np).float().to(device)
             hann_window = torch.hann_window(win_size).to(device)
             mel_window[ps] = (mel_basis.clone(), hann_window.clone())
@@ -171,7 +182,6 @@ class Dataset(torch.utils.data.Dataset):
         n_cache_reuse=1,
         device=None,
         inv_mel=False,
-        use_pghi=False,
     ):
         self.audio_files = training_files
         random.seed(1234)
@@ -192,7 +202,6 @@ class Dataset(torch.utils.data.Dataset):
         self.device = device
         self.meloss = meloss
         self.inv_mel = inv_mel
-        self.pghi = use_pghi
 
     def __getitem__(self, index):
         filename = self.audio_files[index]
@@ -261,15 +270,6 @@ class Dataset(torch.utils.data.Dataset):
             if self.inv_mel
             else torch.tensor([0])
         )
-        if self.pghi:
-            pghid = torch.tensor(
-                pghi(inv_mel.squeeze(0).T.numpy(), self.win_size, self.hop_size)
-            ).T
-            pghid = torch.polar(torch.ones_like(pghid), pghid).angle()
-        else:
-            pghid = torch.tensor([0])
-
-        # print(pghid)
         return (
             mel.squeeze(),
             log_amplitude.squeeze(),
@@ -279,7 +279,6 @@ class Dataset(torch.utils.data.Dataset):
             audio.squeeze(0),
             meloss1.squeeze(),
             inv_mel,
-            pghid,
         )
 
     def __len__(self):
