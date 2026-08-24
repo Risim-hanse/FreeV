@@ -151,7 +151,7 @@ class Generator(torch.nn.Module):
             nn.init.trunc_normal_(m.weight, std=0.02)
             nn.init.constant_(m.bias, 0)
 
-    def forward(self, mel):
+    def forward(self, mel, length=None):
         logamp = self.ASP_input_conv(mel)
         logamp = self.norm2(logamp.transpose(1, 2))
         logamp = logamp.transpose(1, 2)
@@ -186,6 +186,7 @@ class Generator(torch.nn.Module):
             win_length=self.h.win_size,
             window=torch.hann_window(self.h.win_size).to(mel.device),
             center=True,
+            length=length,
         )
 
         return logamp, pha, rea, imag, audio.unsqueeze(1)

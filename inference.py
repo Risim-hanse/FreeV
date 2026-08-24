@@ -61,6 +61,7 @@ def inference(h, device):
         starttime = time.time()
         for filename in filelist:
             input_path = os.path.join(input_dir, filename)
+            output_length = None
             if h.test_mel_load:
                 mel = np.load(input_path)
                 x = torch.as_tensor(mel, dtype=torch.float32, device=device)
@@ -77,8 +78,11 @@ def inference(h, device):
                 raw_wav, _ = librosa.load(input_path, sr=h.sampling_rate, mono=True)
                 raw_wav = torch.as_tensor(raw_wav, dtype=torch.float32, device=device)
                 x = get_mel(raw_wav.unsqueeze(0), h)
+                output_length = raw_wav.numel()
 
-            _logamp_g, _pha_g, _, _, y_g = generator(x)
+            if h.test_mel_load:
+                output_length = getattr(h, "inference_length", None)
+            _logamp_g, _pha_g, _, _, y_g = generator(x, length=output_length)
             audio = y_g.squeeze()
             audio = audio.cpu().numpy()
             output_name = os.path.splitext(filename)[0] + ".wav"
@@ -99,6 +103,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config.json")
     parser.add_argument("--model", choices=("apnet2", "freev"), default="apnet2")
+    parser.add_argument(
+        "--length",
+        dest="inference_length",
+        type=int,
+        default=None,
+        help="Output sample length for precomputed mel input.",
+    )
     args = parser.parse_args()
 
     print("Initializing Inference Process..")
@@ -109,6 +120,7 @@ def main():
     json_config = json.loads(data)
     h = AttrDict(json_config)
     h.model_module = "models" if args.model == "apnet2" else "models_freev"
+    h.inference_length = args.inference_length
 
     torch.manual_seed(h.seed)
     if torch.cuda.is_available():

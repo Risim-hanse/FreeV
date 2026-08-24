@@ -152,7 +152,7 @@ class Generator(torch.nn.Module):
             nn.init.trunc_normal_(m.weight, std=0.02)
             nn.init.constant_(m.bias, 0)
 
-    def forward(self, mel, inv_mel=None):
+    def forward(self, mel, inv_mel=None, length=None):
         if inv_mel is None:
             inv_amp = (
                 inverse_mel(
@@ -203,6 +203,7 @@ class Generator(torch.nn.Module):
             win_length=self.h.win_size,
             window=torch.hann_window(self.h.win_size).to(mel.device),
             center=True,
+            length=length,
         )
 
         return logamp, pha, rea, imag, audio.unsqueeze(1)
